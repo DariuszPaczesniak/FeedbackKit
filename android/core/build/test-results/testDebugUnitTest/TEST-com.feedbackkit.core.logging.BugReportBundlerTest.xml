@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.feedbackkit.core.logging.BugReportBundlerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-26T11:17:55.537Z" hostname="dariuszs-mac-mini-2.home" time="0.019">
-  <properties/>
-  <testcase name="build_includesDeviceInfoAndRecentLogs" classname="com.feedbackkit.core.logging.BugReportBundlerTest" time="0.017"/>
-  <testcase name="build_stillProducesAReport_whenNoLogsHaveBeenRecorded" classname="com.feedbackkit.core.logging.BugReportBundlerTest" time="0.0"/>
-  <testcase name="build_reportsHowManyLogLinesAreIncluded" classname="com.feedbackkit.core.logging.BugReportBundlerTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

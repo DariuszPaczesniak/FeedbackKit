@@ -1,0 +1,14 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+android/**/build/
+local.properties
+
+# Swift Package Manager
+ios/.build/
+ios/.swiftpm/
+.build/
+
+# macOS
+.DS_Store

@@ -1,7 +1,0 @@
-Target dependency graph (3 targets)
-Target 'AllExcludingTests' in project 'Aggregate'
-➜ Explicit dependency on target 'FeedbackKit-product' in project 'FeedbackKit'
-➜ Explicit dependency on target 'FeedbackKit' in project 'FeedbackKit'
-Target 'FeedbackKit-product' in project 'FeedbackKit'
-➜ Explicit dependency on target 'FeedbackKit' in project 'FeedbackKit'
-Target 'FeedbackKit' in project 'FeedbackKit' (no dependencies)
