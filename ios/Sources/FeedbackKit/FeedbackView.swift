@@ -25,17 +25,24 @@ public struct FeedbackView: View {
 
                 if let session {
                     Text(session.name)
+                        .accessibilityIdentifier("feedbackkit.sessionNameLabel")
 
                     TextField("Scenario name", text: $scenarioName)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("feedbackkit.scenarioNameField")
                     TextField("Notes (optional)", text: $notes)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("feedbackkit.notesField")
 
                     HStack {
                         Button("Pass") { record(.pass, in: session) }
+                            .accessibilityIdentifier("feedbackkit.passButton")
                         Button("Fail") { record(.fail, in: session) }
+                            .accessibilityIdentifier("feedbackkit.failButton")
                         Button("Skip") { record(.skip, in: session) }
+                            .accessibilityIdentifier("feedbackkit.skipButton")
                         Button("Blocked") { record(.blocked, in: session) }
+                            .accessibilityIdentifier("feedbackkit.blockedButton")
                     }
                     .buttonStyle(.bordered)
 
@@ -44,18 +51,21 @@ public struct FeedbackView: View {
                     // Reads resultsVersion so this redraws after each recordResult call --
                     // TestSession itself isn't an ObservableObject, it's a plain accumulator.
                     let _ = resultsVersion
-                    ForEach(Array(session.results().enumerated()), id: \.offset) { _, entry in
+                    ForEach(Array(session.results().enumerated()), id: \.offset) { index, entry in
                         let notesSuffix = (entry.notes?.isEmpty == false) ? " — \(entry.notes!)" : ""
                         Text("[\(entry.result.rawValue)] \(entry.scenarioName)\(notesSuffix)")
+                            .accessibilityIdentifier("feedbackkit.resultRow.\(index)")
                     }
                 } else {
                     TextField("Session name", text: $sessionName)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("feedbackkit.sessionNameField")
                     Button("Start session") {
                         if !sessionName.trimmingCharacters(in: .whitespaces).isEmpty {
                             session = TestSession(name: sessionName)
                         }
                     }
+                    .accessibilityIdentifier("feedbackkit.startSessionButton")
                 }
 
                 Divider()
@@ -67,12 +77,14 @@ public struct FeedbackView: View {
                     ShareLink(item: url) {
                         Text("Send bug report")
                     }
+                    .accessibilityIdentifier("feedbackkit.sendButton")
                 }
 
                 Divider()
                 Text("Report preview")
                 Text(reportText)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("feedbackkit.reportPreviewText")
             }
             .padding()
         }

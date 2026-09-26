@@ -23,12 +23,12 @@ The host app calls `Logger.debug/info/warn/error(tag, message)` from its own cod
 ### 2. Preview a bug report before sending
 A user opens the feedback screen and sees a live preview: bundled device/app info (version, OS, model) plus the most recent buffered log lines, rendered as plain text.
 - Supported by: `BugReportBundler` (both platforms), `FeedbackScreen` (`android/ui`) / `FeedbackView` (`ios/Sources/FeedbackKit`).
-- Status: implemented on both platforms (`android:ui:compileDebugKotlin` and a real iOS Simulator `xcodebuild` both pass); no on-device/emulator interaction pass done yet.
+- Status: iOS verified via a real simulator UI test (`ExampleUITests.testReportPreviewIsVisible`, part of `docs/TASKS.md`'s testing plan); Android implemented but not yet UI-tested.
 
 ### 3. Share a bug report as a file attachment
 The user taps "send," and the report is written to a temp file and handed to the platform's native share flow (Android: `ACTION_SEND` + `FileProvider`-backed URI; iOS: `ShareLink`) — rebuilt fresh at share time so it reflects the latest logs, not a stale preview.
 - Supported by: `FeedbackScreen.kt` (Android), `FeedbackView.swift` (iOS).
-- Status: implemented on both platforms; not yet verified via real device/emulator interaction.
+- Status: iOS verified via a real simulator UI test (`ExampleUITests.testSendButtonPresentsShareSheet` — confirms the system share sheet actually appears after tapping); Android implemented but not yet UI-tested.
 
 ### 4. Integrate into a host app with minimal glue
 A team adding FeedbackKit to their own app depends on `android/core` + `android/ui` (Gradle/Maven) or the `ios/` Swift Package (SPM), calls `Logger` from their existing code, and either drops in the provided screen/view as-is or calls `BugReportBundler` directly to build their own UI around it.
@@ -42,17 +42,17 @@ A QA tester working through a written test plan (a list of named scenarios, each
 ### 5. Start a test session and record scenario results
 A tester starts a named `TestSession` (e.g. "Release candidate 1.4 smoke test"), then works through their test plan, recording each scenario as `PASS`, `FAIL`, `SKIP`, or `BLOCKED` with optional free-text notes (e.g. "failed at step 3: button did not respond"). In the provided UI, this is a session-name field + "Start session" button, then a scenario-name/notes field pair with four result buttons.
 - Supported by: `TestSession` (both platforms, tests passing) — see [Architecture](ARCHITECTURE.md#test-session-module); `FeedbackScreen`/`FeedbackView` for the UI.
-- Status: implemented on both platforms.
+- Status: unit-tested on both platforms; iOS additionally verified via a real simulator UI test walking the full tap flow (`ExampleUITests.testStartSessionAndRecordResult`, `.testRecordResultWithNotesShowsSuffix` — session creation, scenario/notes entry, all four result buttons, the notes-suffix format). Android not yet UI-tested.
 
 ### 6. Export a structured test-session report
 Once a session is complete (or at any point mid-session), the tester exports a plain-text results report: session name, start time, and every recorded scenario with its result and notes, in a fixed format both platforms produce identically.
 - Supported by: `TestSession.exportReport()`.
-- Status: implemented and tested on both platforms.
+- Status: implemented and unit-tested on both platforms.
 
 ### 7. Combine test-session results with diagnostic logs in one share
 Because a test session and the `Logger` ring buffer run concurrently, a tester can share one combined report — scenario pass/fail results *plus* the log lines captured while running them — so a failing scenario's notes ("FAIL: step 3") line up with the actual log output from that moment, without the developer needing to correlate two separate files.
 - Supported by: `BugReportBundler` accepting an optional `TestSession`, appending a test-session section to the standard bug report (see `spec/TEST_SESSION_FORMAT.md`); the provided `FeedbackScreen`/`FeedbackView` builds the combined report automatically whenever a session is active.
-- Status: implemented and tested on both platforms (including a test confirming `build()`'s output is unchanged when no session is supplied).
+- Status: unit-tested on both platforms (including a test confirming `build()`'s output is unchanged when no session is supplied); iOS additionally verified via a real simulator UI test confirming the merged section actually appears in the on-screen preview (`ExampleUITests.testRecordedResultAppearsInSharedReportPreview`). Android not yet UI-tested.
 
 ### 8. Resume or reference a prior session's scope
 A tester re-running a subset of a test plan (e.g. only regression-testing the scenarios that failed last time) starts a fresh `TestSession` scoped to just those scenarios — sessions are lightweight and disposable, not a persistent test-management system (see Non-goals).

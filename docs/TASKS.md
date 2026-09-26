@@ -40,20 +40,20 @@ Goal: every use case in `docs/USE_CASES.md` has an explicit, intentional test �
 | # | Use case | Test type | iOS test | Status |
 |---|----------|-----------|----------|--------|
 | 1 | Log during normal operation | Unit | `LoggerTests` (order, levels, eviction, clear) | Done |
-| 2 | Preview a bug report before sending | Unit (text shape) + UI (visible on screen) | `BugReportBundlerTests` (unit); `ExampleUITests.testReportPreviewIsVisible` | Unit done; UI planned |
-| 3 | Share a bug report as a file attachment | UI (file write + share sheet are OS/view-layer effects, not pure logic) | `ExampleUITests.testSendButtonPresentsShareSheet` | Planned |
-| 4 | Integrate into a host app with minimal glue | Integration (proof-by-existence, not a unit/UI test) | `ios/Example` itself depending on the SPM package and building/launching | Planned (comes free with `ios/Example`) |
-| 5 | Start a test session and record scenario results | Unit (data) + UI (the actual tap flow) | `TestSessionTests` (unit); `ExampleUITests.testStartSessionAndRecordResult`, `.testRecordResultWithNotesShowsSuffix` | Unit done; UI planned |
+| 2 | Preview a bug report before sending | Unit (text shape) + UI (visible on screen) | `BugReportBundlerTests` (unit); `ExampleUITests.testReportPreviewIsVisible` | Done |
+| 3 | Share a bug report as a file attachment | UI (file write + share sheet are OS/view-layer effects, not pure logic) | `ExampleUITests.testSendButtonPresentsShareSheet` | Done |
+| 4 | Integrate into a host app with minimal glue | Integration (proof-by-existence, not a unit/UI test) | `ios/Example` itself depending on the SPM package and building/launching | Done |
+| 5 | Start a test session and record scenario results | Unit (data) + UI (the actual tap flow) | `TestSessionTests` (unit); `ExampleUITests.testStartSessionAndRecordResult`, `.testRecordResultWithNotesShowsSuffix` | Done |
 | 6 | Export a structured test-session report | Unit | `TestSessionTests.testExportReport*` | Done |
-| 7 | Combine test-session results with logs in one share | Unit (merged text shape) + UI (visible in the same preview after recording) | `BugReportBundlerTests.testBuild_withTestSession_appendsMergedSection` (unit); `ExampleUITests.testRecordedResultAppearsInSharedReportPreview` | Unit done; UI planned |
+| 7 | Combine test-session results with logs in one share | Unit (merged text shape) + UI (visible in the same preview after recording) | `BugReportBundlerTests.testBuild_withTestSession_appendsMergedSection` (unit); `ExampleUITests.testRecordedResultAppearsInSharedReportPreview` | Done |
 | 8 | Resume/reference a prior session's scope | Unit (implicit — a direct consequence of `TestSession`'s constructor design) | covered by `TestSessionTests` construction cases | Done, no dedicated test needed |
 
-iOS execution steps:
-- [ ] Add accessibility identifiers to `FeedbackView`'s interactive elements (session name field, start-session button, scenario name/notes fields, the four result buttons, each result row, the send button, the preview text) so UI tests query by identifier, not by (possibly-localized) label text.
-- [ ] Scaffold `ios/Example` via `xcodegen` (`project.yml` + `generate`): a single-screen SwiftUI app whose root view is `FeedbackKit.FeedbackView()`, depending on the local `ios/` package by relative path.
-- [ ] Add `ExampleUITests` target with the test cases listed in the table above.
-- [ ] Run for real on a simulator (`xcodebuild test -project Example.xcodeproj -scheme Example -destination 'platform=iOS Simulator,name=...'`) and confirm a genuine pass, not just a successful build.
-- [ ] Update this table's iOS column to "Done" as each test lands.
+iOS execution steps — **all done**:
+- [x] Added accessibility identifiers to `FeedbackView`'s interactive elements (session name field, start-session button, scenario name/notes fields, the four result buttons, each result row (`feedbackkit.resultRow.{index}`), the send button, the preview text) so UI tests query by identifier, not by (possibly-localized) label text.
+- [x] Scaffolded `ios/Example` via `xcodegen` (`project.yml` + `generate`): a single-screen SwiftUI app (`ExampleApp.swift`) whose root view is `FeedbackKit.FeedbackView()`, depending on the local `ios/` package by relative path (`packages: FeedbackKit: path: ../`). The generated `Example.xcodeproj`/`Info.plist` are gitignored (regenerate via `xcodegen generate` from `project.yml`, the same convention the originating app uses for its own Xcode project) — only `project.yml` and the Swift sources are committed.
+- [x] Added `ExampleUITests` target with all 5 test cases from the table above.
+- [x] Ran for real on a simulator: `xcodebuild -project Example.xcodeproj -scheme Example -destination 'platform=iOS Simulator,name=iPhone 18 Pro' test` — **`** TEST SUCCEEDED **`, 5/5 passing**, including a genuine system share-sheet appearance (asserted via `ActivityListView`, `UIActivityViewController`'s stable accessibility identifier) and the merged test-session text actually appearing in the on-screen report preview after tapping through the recording flow.
+- [x] Table above updated to "Done" for every iOS row.
 
 Android execution steps (not started — explicitly deferred until iOS is finished, per instruction):
 - [ ] Same table, Android column: `LoggerTest`/`TestSessionTest`/`BugReportBundlerTest` (unit, already done) + a `FeedbackScreen` Compose UI test suite (`createComposeRule`, works without a separate host app since Compose UI tests can render a composable directly — no Android equivalent of the SPM-host-app constraint above) covering the same scenarios.
@@ -62,16 +62,18 @@ Android execution steps (not started — explicitly deferred until iOS is finish
 
 - [x] **Port the UI layer** — `android/ui`'s `FeedbackScreen.kt` (new Gradle module: Android library + Jetpack Compose, depends on `android:core`, ships its own `FileProvider`/`res/xml/feedbackkit_file_paths.xml`) and `ios/Sources/FeedbackKit/FeedbackView.swift` (SwiftUI, gated `#if os(iOS)` since `ShareLink` needs iOS 16/macOS 13 and this package declares no macOS platform floor). Both build for real: `gradle :android:ui:compileDebugKotlin` succeeds, and a full `xcodebuild -scheme FeedbackKit -destination 'generic/platform=iOS Simulator' build` succeeds (not just a typecheck).
 - [x] **Default strings shipped** (Android) — `android/ui/src/main/res/values/strings.xml` ships default English copy for every user-facing string; a host app can override any of them by declaring a same-named string resource, Android's standard resource-precedence mechanism, so no separate localization API was needed. iOS uses plain string literals in `FeedbackView.swift` (no `String(localized:)` catalog yet — revisit if/when this needs actual translations).
-- [ ] **Verify on real devices** — run both the Android app and iOS app with the new packages/modules, confirm logs are collected, test sessions record correctly, and reports bundle/share correctly via a real device or simulator interaction pass (not just a successful build).
+- [x] **Verify on iOS simulator** — `ios/Example`'s `ExampleUITests` (see "Testing plan" above) is a genuine simulator interaction pass: launches the real app, types into real fields, taps real buttons, and asserts on real on-screen text and a real system share sheet. Not yet run against a physical device, and Android's equivalent (Compose UI tests) hasn't been done — both remain open.
+- [ ] **Verify on real devices** — a physical-device pass for iOS, and both a simulator/emulator and real-device pass for Android (deferred — see "Testing plan" above).
 - [ ] **Wire the originating app back up** — once verified on real devices, switch the original app's feedback screen to depend on this repo instead of its inline logging code, so there's exactly one place implementing this behavior going forward.
 
 ## Not started (planned)
 
-- [ ] Sample/demo app per platform showing minimal integration (bug report + test session).
+- [x] ~~Sample/demo app per platform showing minimal integration~~ — iOS done (`ios/Example`, doubling as the UI test host); Android still open.
+- [ ] Sample/demo app for Android (would double as the Compose UI test host, same role `ios/Example` plays for iOS).
 - [ ] Maven publish config for `android/core`/`android/ui` (build.gradle.kts has the foundation; actual upload/coordinates not configured).
 
 ## Suggested near-term priorities
 
-1. **Verify on real devices/simulators** — actually launch both apps, start a test session, record a few results, and confirm the share sheet produces a correctly-merged report. This is the one remaining gap between "builds successfully" and "the feature genuinely works."
-2. **Wire the originating app back to depend on this repo**, once the above is verified.
-3. Consider a sample/demo app per platform, to give integrators a working reference and a place to do the device verification above.
+1. **Android testing pass** — same shape as the iOS work just finished: a Compose UI test suite (`createComposeRule`) for `FeedbackScreen` covering the same use-case table, no separate host app needed (Compose UI tests render a composable directly). Deferred until explicitly requested, per instruction.
+2. **Physical-device verification** on both platforms, once the above lands.
+3. **Wire the originating app back to depend on this repo**, once verified on real devices.

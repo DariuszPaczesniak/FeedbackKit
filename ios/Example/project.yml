@@ -1,0 +1,52 @@
+name: Example
+options:
+  bundleIdPrefix: com.feedbackkit.example
+  deploymentTarget:
+    iOS: "16.0"
+
+packages:
+  FeedbackKit:
+    path: ../
+
+targets:
+  Example:
+    type: application
+    platform: iOS
+    sources:
+      - path: ExampleApp
+    info:
+      path: ExampleApp/Info.plist
+      properties:
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.feedbackkit.example
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: FeedbackKit
+        product: FeedbackKit
+
+  ExampleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ExampleUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.feedbackkit.example.uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Example
+
+schemes:
+  Example:
+    build:
+      targets:
+        Example: all
+        ExampleUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ExampleUITests

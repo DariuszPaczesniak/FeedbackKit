@@ -31,6 +31,7 @@ android/
 ios/                        Swift Package: FeedbackKit target (native Swift, no KMP dependency)
   Sources/FeedbackKit/      Logger, DeviceInfo, BugReportBundler, TestSession, FeedbackView (SwiftUI, iOS-only)
   Tests/FeedbackKitTests/
+  Example/                  xcodegen-generated host app (project.yml is the source of truth; the .xcodeproj itself is gitignored) embedding FeedbackView -- exists so ExampleUITests (XCUITest) has a real app to launch, since a bare SPM package has none
 spec/                       Shared, language-agnostic design notes both platforms implement against
   REPORT_FORMAT.md           The bug-report text layout/wire format
   BEHAVIOR.md                 Ring buffer semantics, size limits, thread-safety expectations
