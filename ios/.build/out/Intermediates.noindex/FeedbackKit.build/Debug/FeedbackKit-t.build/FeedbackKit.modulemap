@@ -1,0 +1,4 @@
+module FeedbackKit {
+header "FeedbackKit-Swift.h"
+export *
+}
