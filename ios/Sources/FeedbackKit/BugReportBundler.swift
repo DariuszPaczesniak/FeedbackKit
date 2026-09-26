@@ -3,13 +3,16 @@ import Foundation
 public final class BugReportBundler {
     private let deviceInfoSummary: () -> String
     private let now: () -> Int64
+    private let testSession: TestSession?
 
     public init(
         deviceInfoSummary: @escaping () -> String,
-        now: @escaping () -> Int64 = epochMillisNow
+        now: @escaping () -> Int64 = epochMillisNow,
+        testSession: TestSession? = nil
     ) {
         self.deviceInfoSummary = deviceInfoSummary
         self.now = now
+        self.testSession = testSession
     }
 
     public func build() -> String {
@@ -31,10 +34,21 @@ public final class BugReportBundler {
             result += "\n"
         }
 
+        if let session = testSession {
+            let results = session.results()
+            result += "\n"
+            result += "=== Test session: \(session.name) ===\n"
+            result += "\(results.count) scenario(s) recorded\n"
+            result += "\n"
+            for entry in results {
+                result += formatResultLine(entry) + "\n"
+            }
+        }
+
         return result
     }
 }
 
-private func epochMillisNow() -> Int64 {
+public func epochMillisNow() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
 }

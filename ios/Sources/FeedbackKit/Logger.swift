@@ -18,7 +18,7 @@ public final class Logger {
         while entries.count > maxEntries {
             entries.removeFirst()
         }
-        platformLog(level, tag, message)
+        platformLog(level, tag: tag, message: message)
     }
 
     public static func debug(tag: String, message: String) {
@@ -64,10 +64,6 @@ private func platformLog(_ level: LogLevel, tag: String, message: String) {
         osLevel = .error
     }
     os_log("%{public}@: %{public}@", log: log, type: osLevel, tag, message)
-}
-
-private func epochMillisNow() -> Int64 {
-    Int64(Date().timeIntervalSince1970 * 1000)
 }
 
 // Simple deque implementation using a deque-like structure

@@ -44,4 +44,29 @@ final class BugReportBundlerTests: XCTestCase {
 
         XCTAssertTrue(report.contains("Recent logs (0 lines)"))
     }
+
+    func testBuild_withNoTestSession_isUnchanged() {
+        let bundler = BugReportBundler(deviceInfoSummary: { "App version: 0.1\n" })
+        let report = bundler.build()
+
+        XCTAssertFalse(report.contains("Test session"))
+    }
+
+    func testBuild_withTestSession_appendsMergedSection() {
+        let session = TestSession(name: "Smoke test", now: { 2000 })
+        session.recordResult(scenarioName: "Scenario A", result: .pass)
+        session.recordResult(scenarioName: "Scenario B", result: .fail, notes: "crashed")
+
+        let bundler = BugReportBundler(
+            deviceInfoSummary: { "App version: 0.1\n" },
+            testSession: session
+        )
+        let report = bundler.build()
+
+        XCTAssertTrue(report.contains("=== Test session: Smoke test ==="))
+        XCTAssertFalse(report.contains("=== FeedbackKit test session:"))
+        XCTAssertTrue(report.contains("2 scenario(s) recorded"))
+        XCTAssertTrue(report.contains("[PASS] Scenario A"))
+        XCTAssertTrue(report.contains("[FAIL] Scenario B — crashed"))
+    }
 }

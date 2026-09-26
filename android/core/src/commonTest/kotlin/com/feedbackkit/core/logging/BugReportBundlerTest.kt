@@ -51,4 +51,31 @@ class BugReportBundlerTest {
 
         assertTrue(report.contains("Recent logs (0 lines)"))
     }
+
+    @Test
+    fun build_withNoTestSession_isUnchanged() {
+        val bundler = BugReportBundler(deviceInfoSummary = { "App version: 0.1\n" })
+        val report = bundler.build()
+
+        assertTrue(!report.contains("Test session"))
+    }
+
+    @Test
+    fun build_withTestSession_appendsMergedSection() {
+        val session = TestSession("Smoke test", now = { 2000L })
+        session.recordResult("Scenario A", TestResult.PASS)
+        session.recordResult("Scenario B", TestResult.FAIL, "crashed")
+
+        val bundler = BugReportBundler(
+            deviceInfoSummary = { "App version: 0.1\n" },
+            testSession = session
+        )
+        val report = bundler.build()
+
+        assertTrue(report.contains("=== Test session: Smoke test ==="))
+        assertTrue(!report.contains("=== FeedbackKit test session:"))
+        assertTrue(report.contains("2 scenario(s) recorded"))
+        assertTrue(report.contains("[PASS] Scenario A"))
+        assertTrue(report.contains("[FAIL] Scenario B — crashed"))
+    }
 }
