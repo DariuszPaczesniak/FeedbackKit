@@ -28,13 +28,41 @@ Rules that follow from this:
 
 ## Overview
 
-Both platforms implement the same three pieces:
+Both platforms implement the same four pieces:
 
-- **`Logger`** (Android: `PresenceLogger`-derived object; iOS: a Swift `enum`/`final class` namespace) — a fixed-capacity ring buffer of log lines, each mirrored to the platform's native logging.
+- **`Logger`** — a fixed-capacity ring buffer of log lines, each mirrored to the platform's native logging.
 - **`DeviceInfo`** — reads app version + OS version + device model from the platform SDK (`PackageManager`/`Build` on Android; `Bundle`/`UIDevice` on iOS).
-- **`BugReportBundler`** — pure function of `(deviceInfoSummary: () -> String, now: () -> Long/Date)` → formatted report text, so it's unit-testable without a real `Context`/`UIDevice`.
+- **`BugReportBundler`** — pure function of `(deviceInfoSummary: () -> String, now: () -> Long/Date, testSession: TestSession?)` → formatted report text, so it's unit-testable without a real `Context`/`UIDevice`.
+- **`TestSession`** — an in-memory, ordered list of named test-scenario results a QA tester records while working through a test plan, exportable standalone or merged into a `BugReportBundler` report.
 
 A thin platform UI (`FeedbackScreen`/`FeedbackView`) previews the report and triggers the native share flow (`Intent.ACTION_SEND` + `FileProvider` on Android; `ShareLink` on iOS), writing the report to a temp file first so it shares as a real file attachment, not inline text.
+
+## Test session module
+
+`TestSession` is a separate, optional concern from `Logger` — a host app or tester who never runs a formal test plan never touches it, and `Logger`/`BugReportBundler` work exactly as before without one.
+
+```
+TestSession(name: String, now: () -> Long = epochMillisNow)
+  recordResult(scenarioName: String, result: TestResult, notes: String? = null)
+  results(): List<TestScenarioResult>   // in recorded order
+  exportReport(): String                // per spec/TEST_SESSION_FORMAT.md
+  clear()
+
+enum TestResult { PASS, FAIL, SKIP, BLOCKED }
+
+TestScenarioResult (conceptual)
+  scenarioName: String
+  result: TestResult
+  notes: String?
+  recordedAtMillis: Long
+```
+
+Design decisions:
+
+1. **No capacity cap, unlike `Logger`.** A test plan is a bounded, human-authored list (tens of scenarios, not thousands of log lines) — there's no ring-buffer eviction risk worth the added complexity. If this becomes a real problem for very large test plans, revisit; don't pre-optimize for it now.
+2. **`TestSession` doesn't know about `Logger`.** They're independent, composable pieces — `BugReportBundler` is the thing that knows how to combine them (see below), not `TestSession` reaching into `Logger`'s internals. This keeps `TestSession` usable standalone (e.g. a host app that wants scenario tracking but not the log ring buffer).
+3. **A session is a plain object, not a singleton.** Unlike `Logger` (one shared ring buffer for the whole app), a caller constructs a `TestSession` per test run and holds onto it — this is what makes "start a fresh session for a re-run" (use case 8) trivial rather than needing an explicit reset-and-hope-nothing-else-is-watching-the-shared-state dance.
+4. **`BugReportBundler` takes an optional `TestSession`.** When supplied, `build()` appends a test-session section (per `spec/TEST_SESSION_FORMAT.md`) after the log section, so a single shared report carries both without the caller manually concatenating two strings.
 
 ## Module breakdown
 
@@ -43,6 +71,7 @@ A thin platform UI (`FeedbackScreen`/`FeedbackView`) previews the report and tri
 - `Logger.android.kt` (androidMain) — `actual fun platformLog` via `android.util.Log`.
 - `DeviceInfo.kt` (commonMain `expect class`) / `DeviceInfo.android.kt` (`actual`, takes a `Context`).
 - `BugReportBundler.kt` (commonMain) — report assembly.
+- `TestSession.kt` (commonMain, planned) — scenario result recording + export; no platform actuals needed (pure Kotlin, no platform API dependency).
 
 ### `android/app` (or a sample app, once it exists)
 - `FeedbackScreen.kt` — Compose UI: preview + share button (`ACTION_SEND` via `FileProvider`).
@@ -51,11 +80,13 @@ A thin platform UI (`FeedbackScreen`/`FeedbackView`) previews the report and tri
 - `Logger.swift` — ring buffer + `os_log`/`print` mirroring.
 - `DeviceInfo.swift` — reads `Bundle.main` + `UIDevice.current`.
 - `BugReportBundler.swift` — report assembly, mirroring `android/core`'s output shape per `spec/REPORT_FORMAT.md`.
+- `TestSession.swift` (planned) — scenario result recording + export, mirroring `android/core`'s `TestSession.kt` per `spec/TEST_SESSION_FORMAT.md`.
 - `FeedbackView.swift` — SwiftUI: preview + `ShareLink`.
 
 ### `spec/`
 - `REPORT_FORMAT.md` — exact text layout of a bundled report (header, device info block, log section) so both platforms produce byte-for-byte comparable output for a given input.
 - `BEHAVIOR.md` — ring buffer capacity, eviction order, thread-safety expectations (deliberately not thread-safe on either platform — a diagnostic aid, not a system of record).
+- `TEST_SESSION_FORMAT.md` — exact text layout of an exported test-session report, and how it merges into a `BugReportBundler` report.
 
 ## Data model detail
 
@@ -72,17 +103,24 @@ BugReport (conceptual — the bundler's output is plain text, not a structured t
   deviceInfoSummary: String   // multi-line, platform-specific fields
   logCount: Int
   logLines: String            // ring buffer contents, oldest first, newline-joined
+  testSessionSection: String? // present only when a TestSession was supplied
+
+TestScenarioResult (conceptual)
+  scenarioName: String
+  result: PASS | FAIL | SKIP | BLOCKED
+  notes: String?
+  recordedAtMillis: Int64
 ```
 
-Both platforms format `LogEntry` as `"{timestampMillis} [{LEVEL}] {tag}: {message}"` — this exact shape lives in `spec/REPORT_FORMAT.md`, not just in code, so a diff between platforms is checkable without reading both languages side by side.
+Both platforms format `LogEntry` as `"{timestampMillis} [{LEVEL}] {tag}: {message}"` — this exact shape lives in `spec/REPORT_FORMAT.md`, not just in code, so a diff between platforms is checkable without reading both languages side by side. `TestScenarioResult`'s export line format lives in `spec/TEST_SESSION_FORMAT.md`, same reasoning.
 
 ## Cross-cutting concerns
 
-- **Persistence:** none — the ring buffer is in-memory only and is lost on process death by design; this is a live-session diagnostic aid, not a crash reporter.
-- **Concurrency:** deliberately not thread-safe on either platform, matching Presence's original tradeoff — worst case under concurrent logging is an occasionally dropped/out-of-order line, acceptable for this use case. Revisit if a consumer needs stronger guarantees.
-- **Testing:** `BugReportBundler` and `Logger` are unit-testable via injected dependencies (`deviceInfoSummary`, `now`) on both platforms; the UI layers are not covered by automated tests yet (manual test cases only, inherited from Presence's `docs/manual-test-cases.md` convention).
+- **Persistence:** none — the ring buffer and any in-progress `TestSession` are in-memory only and are lost on process death by design; this is a live-session diagnostic aid, not a crash reporter or a test-management system.
+- **Concurrency:** `Logger` is deliberately not thread-safe on either platform — worst case under concurrent logging is an occasionally dropped/out-of-order line, acceptable for this use case. `TestSession` is expected to be driven from a single (usually UI) thread by a human tester working through scenarios one at a time, so the same tradeoff applies without a distinct new risk. Revisit either if a consumer needs stronger guarantees.
+- **Testing:** `BugReportBundler` and `Logger` are unit-testable via injected dependencies (`deviceInfoSummary`, `now`) on both platforms, with passing test suites. `TestSession` is planned to follow the same pattern (injectable `now`). The UI layers are not covered by automated tests yet (manual verification only).
 
 ## Known structural inconsistencies
 
-- The Android/KMP and Swift implementations are two independently-maintained codebases with no compiler-enforced parity — `spec/` is the only thing keeping them in sync, and it doesn't exist yet (tracked in [Tasks](TASKS.md)). Until it's written and both platforms have tests asserting conformance to it, "shared behavior" is aspirational, not verified.
-- Neither `android/` nor `ios/` has been extracted from Presence yet — this repo currently holds only planning docs.
+- The Android/KMP and Swift implementations are two independently-maintained codebases with no compiler-enforced parity — `spec/` is the only thing keeping them in sync. `Logger`/`DeviceInfo`/`BugReportBundler` have tests on both platforms asserting conformance to `spec/REPORT_FORMAT.md`; `TestSession` doesn't exist yet on either platform, so `spec/TEST_SESSION_FORMAT.md` is currently a contract with no implementation to check it against.
+- Neither platform's UI layer (`FeedbackScreen`/`FeedbackView`) has been built yet — see [Tasks](TASKS.md).
