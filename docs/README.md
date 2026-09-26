@@ -25,10 +25,11 @@ FeedbackKit is a standalone bug-report and QA test-session SDK for mobile apps. 
 ## Repository layout
 
 ```
-android/                   Kotlin (JVM + Android) module: Logger, DeviceInfo, BugReportBundler, TestSession, FeedbackScreen (Compose)
-  core/                     Kotlin Multiplatform library (commonMain + androidMain); publishable as a Maven artifact
+android/
+  core/                     Kotlin Multiplatform library (commonMain + androidMain): Logger, DeviceInfo, BugReportBundler, TestSession; publishable as a Maven artifact
+  ui/                       Android library (Jetpack Compose, depends on android:core): FeedbackScreen, FileProvider setup
 ios/                        Swift Package: FeedbackKit target (native Swift, no KMP dependency)
-  Sources/FeedbackKit/      Logger, DeviceInfo, BugReportBundler, TestSession, FeedbackView (SwiftUI)
+  Sources/FeedbackKit/      Logger, DeviceInfo, BugReportBundler, TestSession, FeedbackView (SwiftUI, iOS-only)
   Tests/FeedbackKitTests/
 spec/                       Shared, language-agnostic design notes both platforms implement against
   REPORT_FORMAT.md           The bug-report text layout/wire format
@@ -37,4 +38,4 @@ spec/                       Shared, language-agnostic design notes both platform
 docs/                       This documentation
 ```
 
-`android/core` and `ios/` are scaffolded with `Logger`/`DeviceInfo`/`BugReportBundler` (tests passing); `TestSession` and the UI layers are tracked in [Tasks](TASKS.md), not yet built.
+All modules are scaffolded and passing tests/builds: `android/core` (17 unit tests), `android/ui` (compiles), `ios/` (16 XCTest cases, plus a real `xcodebuild` pass for the iOS Simulator target). Real-device verification and wiring the originating app back to depend on this repo are tracked in [Tasks](TASKS.md).

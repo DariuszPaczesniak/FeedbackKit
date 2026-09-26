@@ -73,15 +73,16 @@ Design decisions:
 - `BugReportBundler.kt` (commonMain) — report assembly.
 - `TestSession.kt` (commonMain, planned) — scenario result recording + export; no platform actuals needed (pure Kotlin, no platform API dependency).
 
-### `android/app` (or a sample app, once it exists)
-- `FeedbackScreen.kt` — Compose UI: preview + share button (`ACTION_SEND` via `FileProvider`).
+### `android/ui` (Android library, Jetpack Compose — depends on `android:core`)
+- `FeedbackScreen.kt` — Compose UI: test-session recording (session name, scenario/notes fields, PASS/FAIL/SKIP/BLOCKED buttons, recorded-results list) + bug-report preview + share button (`ACTION_SEND` via `FileProvider`). Kept in a separate module from `android/core` so a consumer that only wants `Logger`/`BugReportBundler`/`TestSession` (no Compose dependency) isn't forced to pull in Compose.
+- `AndroidManifest.xml` — declares the `FileProvider` (`${applicationId}.feedbackkit.fileprovider`) a host app's manifest merges in automatically; `res/xml/feedbackkit_file_paths.xml` scopes it to a `feedbackkit-reports/` cache subdirectory.
 
 ### `ios/Sources/FeedbackKit`
 - `Logger.swift` — ring buffer + `os_log`/`print` mirroring.
 - `DeviceInfo.swift` — reads `Bundle.main` + `UIDevice.current`.
 - `BugReportBundler.swift` — report assembly, mirroring `android/core`'s output shape per `spec/REPORT_FORMAT.md`.
 - `TestSession.swift` (planned) — scenario result recording + export, mirroring `android/core`'s `TestSession.kt` per `spec/TEST_SESSION_FORMAT.md`.
-- `FeedbackView.swift` — SwiftUI: preview + `ShareLink`.
+- `FeedbackView.swift` — SwiftUI: same test-session recording UI + bug-report preview + `ShareLink`, gated behind `#if os(iOS)` (the package has no macOS platform floor, and `ShareLink`'s `Transferable` conformance needs iOS 16/macOS 13 — since this view is iOS-only by design anyway, gating it lets `swift test` still build/run cleanly on the host Mac without pulling in an unwanted macOS platform requirement).
 
 ### `spec/`
 - `REPORT_FORMAT.md` — exact text layout of a bundled report (header, device info block, log section) so both platforms produce byte-for-byte comparable output for a given input.
@@ -123,4 +124,4 @@ Both platforms format `LogEntry` as `"{timestampMillis} [{LEVEL}] {tag}: {messag
 ## Known structural inconsistencies
 
 - The Android/KMP and Swift implementations are two independently-maintained codebases with no compiler-enforced parity — `spec/` is the only thing keeping them in sync. `Logger`/`DeviceInfo`/`BugReportBundler` have tests on both platforms asserting conformance to `spec/REPORT_FORMAT.md`; `TestSession` doesn't exist yet on either platform, so `spec/TEST_SESSION_FORMAT.md` is currently a contract with no implementation to check it against.
-- Neither platform's UI layer (`FeedbackScreen`/`FeedbackView`) has been built yet — see [Tasks](TASKS.md).
+- Neither UI layer has automated tests yet (manual verification: `gradle :android:ui:compileDebugKotlin` and a real `xcodebuild ... build` both succeed, but no on-device/emulator interaction pass has been done) — see [Tasks](TASKS.md).

@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
     name: "FeedbackKit",
     platforms: [
-        .iOS(.v14)
+        // .v16 for ShareLink, used by FeedbackView.
+        .iOS(.v16)
     ],
     products: [
         .library(

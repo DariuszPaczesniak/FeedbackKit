@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 rootProject.name = "feedbackkit"
 
 include(":android:core")
+include(":android:ui")

@@ -1,0 +1,19 @@
+<resources>
+    <string name="feedbackkit_title">Feedback</string>
+    <string name="feedbackkit_send_button">Send bug report</string>
+    <string name="feedbackkit_preview_label">Report preview</string>
+    <string name="feedbackkit_email_subject">Bug report</string>
+    <string name="feedbackkit_clip_data_label">Bug report</string>
+    <string name="feedbackkit_share_chooser_title">Send bug report</string>
+
+    <string name="feedbackkit_test_session_title">Test session</string>
+    <string name="feedbackkit_test_session_name_label">Session name</string>
+    <string name="feedbackkit_test_session_start_button">Start session</string>
+    <string name="feedbackkit_scenario_name_label">Scenario name</string>
+    <string name="feedbackkit_notes_label">Notes (optional)</string>
+    <string name="feedbackkit_result_pass">Pass</string>
+    <string name="feedbackkit_result_fail">Fail</string>
+    <string name="feedbackkit_result_skip">Skip</string>
+    <string name="feedbackkit_result_blocked">Blocked</string>
+    <string name="feedbackkit_recorded_results_label">Recorded results</string>
+</resources>
