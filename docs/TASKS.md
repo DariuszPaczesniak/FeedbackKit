@@ -57,6 +57,7 @@ iOS execution steps — **all done**:
 
 Android execution steps (not started — explicitly deferred until iOS is finished, per instruction):
 - [ ] Same table, Android column: `LoggerTest`/`TestSessionTest`/`BugReportBundlerTest` (unit, already done) + a `FeedbackScreen` Compose UI test suite (`createComposeRule`, works without a separate host app since Compose UI tests can render a composable directly — no Android equivalent of the SPM-host-app constraint above) covering the same scenarios.
+- [ ] **Port screenshot attachments + markup to Android** (iOS done: `d849abf`, `ios/Sources/FeedbackKit/FeedbackAttachment.swift` + `AttachmentMarkupView.swift`, wired into `FeedbackView.swift`'s `ShareLink`). Android equivalent: capture the current screen via `PixelCopy`/`View.drawToBitmap()`, pick an existing image via the modern Android Photo Picker (`ActivityResultContracts.PickVisualMedia`, no storage permission needed), freehand markup via a custom Compose `Canvas` + `Modifier.pointerInput` (no PencilKit equivalent on Android), up to 5 attachments, each written to `context.cacheDir` as PNG with its own `FileProvider` URI, switching the existing `Intent.ACTION_SEND` in `FeedbackScreen.kt` to `Intent.ACTION_SEND_MULTIPLE` with a multi-item `ClipData`. Deferred per the current iOS-first dispatch policy — don't start until explicitly requested.
 
 ## UI layer and integration
 
