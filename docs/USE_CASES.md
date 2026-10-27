@@ -26,9 +26,9 @@ A user opens the feedback screen and sees a live preview: bundled device/app inf
 - Status: iOS verified via a real simulator UI test (`ExampleUITests.testReportPreviewIsVisible`, part of `docs/TASKS.md`'s testing plan); Android implemented but not yet UI-tested.
 
 ### 3. Share a bug report as a file attachment
-The user taps "send," and the report is written to a temp file and handed to the platform's native share flow (Android: `ACTION_SEND` + `FileProvider`-backed URI; iOS: `ShareLink`) — rebuilt fresh at share time so it reflects the latest logs, not a stale preview.
-- Supported by: `FeedbackScreen.kt` (Android), `FeedbackView.swift` (iOS).
-- Status: iOS verified via a real simulator UI test (`ExampleUITests.testSendButtonPresentsShareSheet` — confirms the system share sheet actually appears after tapping); Android implemented but not yet UI-tested.
+The user taps "send," and the report is written to a temp file and handed to the platform's native share flow (Android: `ACTION_SEND` + `FileProvider`-backed URI; iOS: `ShareLink`) — rebuilt fresh at share time so it reflects the latest logs, not a stale preview. On iOS, the user can also attach up to 5 screenshots (captured from the current screen or chosen from Photos), optionally marked up with freehand drawing (PencilKit), and these are included as additional image files alongside the report in the same share.
+- Supported by: `FeedbackScreen.kt` (Android), `FeedbackView.swift` (iOS), `FeedbackAttachment`/`AttachmentMarkupView` (iOS).
+- Status: iOS verified via a real simulator UI test (`ExampleUITests.testSendButtonPresentsShareSheet` — confirms the system share sheet actually appears after tapping; `testSendButtonPresentsShareSheetWithScreenshotAttachment` additionally covers the screenshot-attachment path); Android implemented but not yet UI-tested, and the screenshot-attachment feature is iOS-only so far.
 
 ### 4. Integrate into a host app with minimal glue
 A team adding FeedbackKit to their own app depends on `android/core` + `android/ui` (Gradle/Maven) or the `ios/` Swift Package (SPM), calls `Logger` from their existing code, and either drops in the provided screen/view as-is or calls `BugReportBundler` directly to build their own UI around it.

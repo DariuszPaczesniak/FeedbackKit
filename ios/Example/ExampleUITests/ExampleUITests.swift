@@ -35,6 +35,38 @@ final class ExampleUITests: XCTestCase {
         XCTAssertTrue(shareSheet.waitForExistence(timeout: 5), "expected the system share sheet to appear")
     }
 
+    /// Use case 3 (attachments variant): adding a screenshot attachment --
+    /// via "capture current screen," which needs no photo-library permission
+    /// or mock, unlike the Photos picker -- still lets the send button
+    /// present the system share sheet, now carrying the report file plus
+    /// the attachment's PNG.
+    func testSendButtonPresentsShareSheetWithScreenshotAttachment() throws {
+        let addAttachmentButton = app.buttons["feedbackkit.addAttachmentButton"]
+        XCTAssertTrue(addAttachmentButton.waitForExistence(timeout: 5))
+        addAttachmentButton.tap()
+
+        // confirmationDialog's SwiftUI buttons can surface more than one
+        // matching accessibility element for the same identifier (the row
+        // and an inner label) -- `firstMatch` disambiguates, same as a
+        // plain existence/tap would for a single on-screen button.
+        let captureScreenButton = app.buttons["feedbackkit.captureScreenButton"].firstMatch
+        XCTAssertTrue(captureScreenButton.waitForExistence(timeout: 5))
+        captureScreenButton.tap()
+
+        // A thumbnail should appear in the attachment strip once the capture
+        // completes and the attachment is appended.
+        let thumbnailPredicate = NSPredicate(format: "identifier BEGINSWITH 'feedbackkit.attachmentThumbnail.'")
+        let thumbnail = app.buttons.containing(thumbnailPredicate).firstMatch
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: 5), "expected a screenshot attachment thumbnail to appear")
+
+        let sendButton = app.buttons["feedbackkit.sendButton"]
+        XCTAssertTrue(sendButton.waitForExistence(timeout: 5))
+        sendButton.tap()
+
+        let shareSheet = app.otherElements["ActivityListView"]
+        XCTAssertTrue(shareSheet.waitForExistence(timeout: 5), "expected the system share sheet to appear with the attachment included")
+    }
+
     /// Use case 5: start a test session and record a scenario result --
     /// the full tap-through flow, not just the underlying TestSession data.
     func testStartSessionAndRecordResult() throws {
