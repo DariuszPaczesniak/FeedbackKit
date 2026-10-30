@@ -1,0 +1,24 @@
+{
+  "id": "feedbackkit-example-smoke",
+  "title": "Example smoke test",
+  "version": "1",
+  "sections": [
+    {
+      "id": "launch",
+      "title": "Launch",
+      "items": [
+        { "id": "launch-cold", "title": "Cold launch shows the feedback screen" },
+        { "id": "launch-offline", "title": "Launch in airplane mode", "detail": "No crash; the report preview still renders." }
+      ]
+    },
+    {
+      "id": "report",
+      "title": "Bug report",
+      "items": [
+        { "id": "report-preview", "title": "Report preview shows device info and logs" },
+        { "id": "report-screenshot", "title": "Attach a screenshot and mark it up" },
+        { "id": "report-share", "title": "Send the report via the share sheet" }
+      ]
+    }
+  ]
+}
