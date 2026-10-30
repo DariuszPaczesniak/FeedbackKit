@@ -1,0 +1,23 @@
+{
+  "id": "example-smoke-test",
+  "title": "Example smoke test",
+  "version": "1",
+  "futureField": "ignored by this version",
+  "sections": [
+    {
+      "id": "launch",
+      "title": "Launch",
+      "items": [
+        { "id": "launch-cold", "title": "Cold launch shows the home screen" },
+        { "id": "launch-offline", "title": "Launch in airplane mode", "detail": "Expect an offline banner, no crash." }
+      ]
+    },
+    {
+      "id": "share",
+      "title": "Sharing",
+      "items": [
+        { "id": "share-report", "title": "Send a bug report via the share sheet" }
+      ]
+    }
+  ]
+}

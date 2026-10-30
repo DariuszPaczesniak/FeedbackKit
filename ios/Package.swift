@@ -22,7 +22,8 @@ let package = Package(
         .testTarget(
             name: "FeedbackKitTests",
             dependencies: ["FeedbackKit"],
-            path: "Tests/FeedbackKitTests"
+            path: "Tests/FeedbackKitTests",
+            resources: [.copy("Fixtures")]
         )
     ]
 )

@@ -1,0 +1,8 @@
+{
+  "id": "dupes",
+  "title": "Duplicate ids",
+  "sections": [
+    { "id": "a", "title": "A", "items": [ { "id": "same", "title": "First" } ] },
+    { "id": "b", "title": "B", "items": [ { "id": "same", "title": "Second" } ] }
+  ]
+}

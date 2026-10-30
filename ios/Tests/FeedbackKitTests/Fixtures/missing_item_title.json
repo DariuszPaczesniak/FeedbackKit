@@ -1,0 +1,7 @@
+{
+  "id": "broken",
+  "title": "Broken",
+  "sections": [
+    { "id": "a", "title": "A", "items": [ { "id": "no-title" } ] }
+  ]
+}
