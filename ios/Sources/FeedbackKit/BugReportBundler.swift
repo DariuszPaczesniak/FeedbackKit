@@ -35,14 +35,11 @@ public final class BugReportBundler {
         }
 
         if let session = testSession {
-            let results = session.results()
             result += "\n"
             result += "=== Test session: \(session.name) ===\n"
-            result += "\(results.count) scenario(s) recorded\n"
-            result += "\n"
-            for entry in results {
-                result += formatResultLine(entry) + "\n"
-            }
+            // Unchanged for a plain session; adds progress, every checklist
+            // item, and a "Not run" list when one is attached.
+            result += session.reportBody()
         }
 
         return result

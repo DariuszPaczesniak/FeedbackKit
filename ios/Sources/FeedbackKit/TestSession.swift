@@ -131,12 +131,75 @@ public final class TestSession {
     }
 
     public func exportReport() -> String {
+        "=== FeedbackKit test session: \(name) ===\n" + reportBody()
+    }
+
+    /// Everything after the session header line, shared by `exportReport()`
+    /// and `BugReportBundler`'s merged section. Without a checklist this is
+    /// exactly the original format (spec/TEST_SESSION_FORMAT.md); with one
+    /// it's the layout in spec/TEST_CHECKLIST_FORMAT.md.
+    func reportBody() -> String {
+        guard let checklist else {
+            var result = ""
+            result += "\(entries.count) scenario(s) recorded\n"
+            result += "\n"
+            for entry in entries {
+                result += formatResultLine(entry) + "\n"
+            }
+            return result
+        }
+        return checklistReportBody(checklist)
+    }
+
+    private func checklistReportBody(_ checklist: TestChecklist) -> String {
+        let progress = checklistProgress() ?? TestChecklistProgress(total: 0, run: 0, counts: [:])
+        let versionSuffix = checklist.version.map { ", version \($0)" } ?? ""
+
         var result = ""
-        result += "=== FeedbackKit test session: \(name) ===\n"
         result += "\(entries.count) scenario(s) recorded\n"
-        result += "\n"
-        for entry in entries {
-            result += formatResultLine(entry) + "\n"
+        result += "Checklist: \(checklist.title) (\(checklist.id)\(versionSuffix))\n"
+        result += "Progress: \(progress.run) of \(progress.total) run\n"
+        result += "Results: \(progress.count(of: .pass)) PASS, \(progress.count(of: .fail)) FAIL, "
+        result += "\(progress.count(of: .skip)) SKIP, \(progress.count(of: .blocked)) BLOCKED, \(progress.notRun) NOT RUN\n"
+
+        var notRunLines: [String] = []
+        for section in checklist.sections {
+            result += "\n--- \(section.title) ---\n"
+            for item in section.items {
+                if let entry = self.result(forItemID: item.id) {
+                    // Current title, not the one recorded: ids are the stable key.
+                    let titled = TestScenarioResult(
+                        scenarioName: item.title,
+                        result: entry.result,
+                        notes: entry.notes,
+                        recordedAtMillis: entry.recordedAtMillis,
+                        itemID: item.id
+                    )
+                    result += formatResultLine(titled) + "\n"
+                } else {
+                    result += "[NOT RUN] \(item.title)\n"
+                    notRunLines.append("- \(section.title): \(item.title)")
+                }
+            }
+        }
+
+        // Free-form results, plus any whose item id the checklist no longer has.
+        let adHoc = entries.filter { entry in
+            guard let itemID = entry.itemID else { return true }
+            return checklist.item(withID: itemID) == nil
+        }
+        if !adHoc.isEmpty {
+            result += "\n--- Ad-hoc scenarios ---\n"
+            for entry in adHoc {
+                result += formatResultLine(entry) + "\n"
+            }
+        }
+
+        if !notRunLines.isEmpty {
+            result += "\n--- Not run (\(notRunLines.count)) ---\n"
+            for line in notRunLines {
+                result += line + "\n"
+            }
         }
         return result
     }
