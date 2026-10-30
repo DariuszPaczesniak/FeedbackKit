@@ -69,4 +69,40 @@ final class BugReportBundlerTests: XCTestCase {
         XCTAssertTrue(report.contains("[PASS] Scenario A"))
         XCTAssertTrue(report.contains("[FAIL] Scenario B — crashed"))
     }
+
+    /// Golden test: the exact bytes of a merged report for a plain
+    /// (checklist-less) session, pinned so checklist support can't drift it.
+    func testBuild_withPlainTestSession_isByteIdenticalToSpec() {
+        Logger.clear()
+        let session = TestSession(name: "Smoke test", now: { 2000 })
+        session.recordResult(scenarioName: "Scenario A", result: .pass)
+        session.recordResult(scenarioName: "Scenario B", result: .fail, notes: "crashed")
+        session.recordResult(scenarioName: "Scenario C", result: .skip, notes: "")
+
+        let bundler = BugReportBundler(
+            deviceInfoSummary: { "App version: 0.1" },
+            now: { 1695384924000 },
+            testSession: session
+        )
+
+        XCTAssertEqual(
+            bundler.build(),
+            """
+            === FeedbackKit bug report ===
+            Generated at (epoch millis): 1695384924000
+
+            App version: 0.1
+
+            === Recent logs (0 lines) ===
+
+            === Test session: Smoke test ===
+            3 scenario(s) recorded
+
+            [PASS] Scenario A
+            [FAIL] Scenario B — crashed
+            [SKIP] Scenario C
+
+            """
+        )
+    }
 }
