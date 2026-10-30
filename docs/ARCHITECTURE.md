@@ -33,7 +33,7 @@ Both platforms implement the same four pieces:
 - **`Logger`** — a fixed-capacity ring buffer of log lines, each mirrored to the platform's native logging.
 - **`DeviceInfo`** — reads app version + OS version + device model from the platform SDK (`PackageManager`/`Build` on Android; `Bundle`/`UIDevice` on iOS).
 - **`BugReportBundler`** — pure function of `(deviceInfoSummary: () -> String, now: () -> Long/Date, testSession: TestSession?)` → formatted report text, so it's unit-testable without a real `Context`/`UIDevice`.
-- **`TestSession`** — an in-memory, ordered list of named test-scenario results a QA tester records while working through a test plan, exportable standalone or merged into a `BugReportBundler` report.
+- **`TestSession`** — an in-memory, ordered list of named test-scenario results a QA tester records while working through a test plan, exportable standalone or merged into a `BugReportBundler` report. Optionally backed by a predefined **`TestChecklist`** and persisted by a **`TestSessionStore`** (iOS so far; see "Predefined test checklists" below).
 
 A thin platform UI (`FeedbackScreen`/`FeedbackView`) previews the report and triggers the native share flow (`Intent.ACTION_SEND` + `FileProvider` on Android; `ShareLink` on iOS), writing the report to a temp file first so it shares as a real file attachment, not inline text.
 
@@ -64,6 +64,30 @@ Design decisions:
 3. **A session is a plain object, not a singleton.** Unlike `Logger` (one shared ring buffer for the whole app), a caller constructs a `TestSession` per test run and holds onto it — this is what makes "start a fresh session for a re-run" (use case 8) trivial rather than needing an explicit reset-and-hope-nothing-else-is-watching-the-shared-state dance.
 4. **`BugReportBundler` takes an optional `TestSession`.** When supplied, `build()` appends a test-session section (per `spec/TEST_SESSION_FORMAT.md`) after the log section, so a single shared report carries both without the caller manually concatenating two strings.
 
+## Predefined test checklists
+
+A host app can hand FeedbackKit a ready-made test plan (`TestChecklist`, loaded from JSON per `spec/TEST_CHECKLIST_FORMAT.md`) so a tester ticks through it instead of retyping scenario names. iOS only so far; the Android port is queued in `docs/TASKS.md`.
+
+```
+TestChecklist(id, title, version?, sections: [TestChecklistSection(id, title, items: [TestChecklistItem(id, title, detail?)])])
+  TestChecklist.load(from: URL) throws / init(jsonData:) throws   // validates; TestChecklistError, never a crash
+
+TestSession(name, id = UUID, checklist: TestChecklist? = nil, now)
+  recordResult(for: item, result, notes)   // replaces the item's earlier result
+  updateNotes(forItemID:notes:) / resetResult(forItemID:) / result(forItemID:)
+  checklistProgress() -> TestChecklistProgress?   // total / run / notRun / count(of:)
+
+TestSessionStore(directory = Application Support/FeedbackKit/TestSessions)
+  save(_:) -> Bool / load(id:checklist:) / latestSession(for:) / delete(id:) / deleteAll()
+```
+
+Design decisions:
+
+1. **Results are keyed by stable item id, not title or position.** Editing a title never orphans progress; the report always shows the item's current title. A result whose id has left the checklist is kept and reported as ad-hoc.
+2. **"Not run" is the absence of a result, not a `TestResult` case.** `TestResult` stays `PASS/FAIL/SKIP/BLOCKED`, so every existing switch/serialization is unaffected; "not run" exists only in the UI and the report.
+3. **The checklist attaches to the session, not to `BugReportBundler`.** `BugReportBundler` and `exportReport()` share one `reportBody()`; without a checklist it's the original code path, byte-for-byte (pinned by golden tests).
+4. **Persistence is opt-in and checklist-driven.** `FeedbackView()` stays in-memory; `FeedbackView(checklist:)` saves after every change. The store keeps one JSON file per session id and saves the checklist's *id*, not the checklist, so the host's current checklist (with edited titles) is applied on restore. All I/O failures are logged via `Logger` and treated as "nothing saved" — the store never throws or crashes.
+
 ## Module breakdown
 
 ### `android/core` (Kotlin Multiplatform: commonMain + androidMain)
@@ -81,13 +105,17 @@ Design decisions:
 - `Logger.swift` — ring buffer + `os_log`/`print` mirroring.
 - `DeviceInfo.swift` — reads `Bundle.main` + `UIDevice.current`.
 - `BugReportBundler.swift` — report assembly, mirroring `android/core`'s output shape per `spec/REPORT_FORMAT.md`.
-- `TestSession.swift` (planned) — scenario result recording + export, mirroring `android/core`'s `TestSession.kt` per `spec/TEST_SESSION_FORMAT.md`.
+- `TestSession.swift` — scenario result recording + export, mirroring `android/core`'s `TestSession.kt` per `spec/TEST_SESSION_FORMAT.md`; plus per-item checklist results and the checklist report layout per `spec/TEST_CHECKLIST_FORMAT.md`.
+- `TestChecklist.swift` — the checklist model + validating JSON loader.
+- `TestSessionStore.swift` — one-file-per-session persistence under Application Support.
+- `ChecklistItemRow.swift` — the checklist item row used by `FeedbackView` (iOS-only).
 - `FeedbackView.swift` — SwiftUI: same test-session recording UI + bug-report preview + `ShareLink`, gated behind `#if os(iOS)` (the package has no macOS platform floor, and `ShareLink`'s `Transferable` conformance needs iOS 16/macOS 13 — since this view is iOS-only by design anyway, gating it lets `swift test` still build/run cleanly on the host Mac without pulling in an unwanted macOS platform requirement).
 
 ### `spec/`
 - `REPORT_FORMAT.md` — exact text layout of a bundled report (header, device info block, log section) so both platforms produce byte-for-byte comparable output for a given input.
 - `BEHAVIOR.md` — ring buffer capacity, eviction order, thread-safety expectations (deliberately not thread-safe on either platform — a diagnostic aid, not a system of record).
 - `TEST_SESSION_FORMAT.md` — exact text layout of an exported test-session report, and how it merges into a `BugReportBundler` report.
+- `TEST_CHECKLIST_FORMAT.md` — the checklist JSON format, validation and stable-id rules, how a checklist maps onto `TestSession`, persistence, and the checklist report additions.
 
 ## Data model detail
 
@@ -117,9 +145,9 @@ Both platforms format `LogEntry` as `"{timestampMillis} [{LEVEL}] {tag}: {messag
 
 ## Cross-cutting concerns
 
-- **Persistence:** none — the ring buffer and any in-progress `TestSession` are in-memory only and are lost on process death by design; this is a live-session diagnostic aid, not a crash reporter or a test-management system.
+- **Persistence:** the ring buffer and plain `TestSession`s are in-memory only and are lost on process death by design; this is a live-session diagnostic aid, not a crash reporter or a test-management system. The one exception is opt-in: a checklist-backed session (iOS) is saved by `TestSessionStore` so a long manual test pass survives a force-quit — a local cache of the in-progress run, not a results history.
 - **Concurrency:** `Logger` is deliberately not thread-safe on either platform — worst case under concurrent logging is an occasionally dropped/out-of-order line, acceptable for this use case. `TestSession` is expected to be driven from a single (usually UI) thread by a human tester working through scenarios one at a time, so the same tradeoff applies without a distinct new risk. Revisit either if a consumer needs stronger guarantees.
-- **Testing:** `Logger`, `BugReportBundler`, and `TestSession` are unit-testable via injected dependencies (`deviceInfoSummary`, `now`) on both platforms, with passing test suites (17 Kotlin tests, 16 Swift tests). The UI layer has real, automated interaction tests on iOS (`ios/Example`'s `ExampleUITests`, an XCUITest suite run against a real simulator — see `docs/TASKS.md`'s testing plan for the full use-case-to-test mapping); Android's UI layer (`FeedbackScreen`) doesn't have an equivalent Compose UI test suite yet.
+- **Testing:** `Logger`, `BugReportBundler`, and `TestSession` are unit-testable via injected dependencies (`deviceInfoSummary`, `now`) on both platforms, with passing test suites (17 Kotlin tests, 55 Swift tests). The UI layer has real, automated interaction tests on iOS (`ios/Example`'s `ExampleUITests`, an XCUITest suite run against a real simulator — see `docs/TASKS.md`'s testing plan for the full use-case-to-test mapping); Android's UI layer (`FeedbackScreen`) doesn't have an equivalent Compose UI test suite yet.
 
 ## Known structural inconsistencies
 

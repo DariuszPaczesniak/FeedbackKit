@@ -59,10 +59,25 @@ A tester re-running a subset of a test plan (e.g. only regression-testing the sc
 - Supported by: `TestSession`'s constructor (a session is just a name + an in-memory list; nothing prevents starting a new one per run).
 - Status: implemented (a direct consequence of `TestSession`'s design — no dedicated code needed).
 
+### 9. Run a predefined test checklist inside the app
+The host app ships a test plan as a JSON checklist (sections of items with stable ids — see `spec/TEST_CHECKLIST_FORMAT.md`) and passes it to `FeedbackView(checklist:)`. The tester starts a session (pre-named after the checklist), marks each item Pass/Fail/Skip/Blocked (tap again to reset it to "not run"), adds notes inline, sees "N of M run" progress, and can filter to All / Not run / Failed. Free-form ad-hoc scenarios can still be recorded alongside.
+- Supported by: `TestChecklist`, `TestSession`'s per-item API, `FeedbackView(checklist:)` (iOS).
+- Status: iOS unit-tested (`TestChecklistTests`, `TestSessionTests`) and UI-tested on the simulator (`ChecklistUITests`: load, mark, reset, filter, notes, ad-hoc, share sheet). Android queued.
+
+### 10. Resume a checklist run after a relaunch
+A full manual pass can take an hour; a force-quit or crash in the app under test must not wipe it. A checklist-backed session is saved after every change, and the next launch offers **Resume** (progress, results and notes restored) or **Start new**; **Clear session** deletes it.
+- Supported by: `TestSessionStore` (Application Support, one file per session id), `FeedbackView(checklist:)`.
+- Status: iOS unit-tested (`TestSessionStoreTests`) and UI-tested with a real terminate + relaunch (`ChecklistUITests.testRelaunchRestoresProgress`). Android queued.
+
+### 11. Report what was never run
+The shared report for a checklist session lists every item in checklist order with its result and notes, progress and per-result counts, and a "Not run" list — so a reader sees the gaps, not just what was recorded.
+- Supported by: `TestSession.exportReport()` / `BugReportBundler` (format in `spec/TEST_CHECKLIST_FORMAT.md`).
+- Status: iOS unit-tested byte-for-byte (`ChecklistReportTests`); the checklist-less report is unchanged (golden tests).
+
 ## Non-goals (as currently understood)
 
-- **Crash reporting / persistence across process death.** The ring buffer and any in-progress test session are in-memory only by design — this is a "hand over what's happening right now" tool, not a Crashlytics/Sentry replacement or a test-management system.
+- **Crash reporting / persistence across process death.** The ring buffer and plain test sessions are in-memory only by design — this is a "hand over what's happening right now" tool, not a Crashlytics/Sentry replacement or a test-management system. (The single exception is use case 10: an in-progress *checklist* run is cached locally so it survives a relaunch. FeedbackKit still keeps no history of past runs.)
 - **A backend, dashboard, or test-case management system.** Reports (bug reports and test-session reports alike) are shared via the OS share sheet to whatever destination the user picks; FeedbackKit never talks to a server, never stores historical session results, and doesn't replace a real test-case management tool (TestRail, Zephyr, etc.) — it produces a report a human pastes into one, or attaches to a ticket.
 - **Structured/remote log ingestion or analytics.** No network calls, no analytics pipeline — everything happens on-device until the user explicitly shares.
-- **Defining or validating the test plan itself.** FeedbackKit records whatever scenario names/results the host app or tester gives it — it has no opinion on what a "test plan" contains, no built-in scenario library, and doesn't verify that recorded steps were actually followed.
+- **Authoring the test plan itself.** FeedbackKit records whatever scenario names/results the host app or tester gives it, and can *run* a checklist the host app supplies (validating only its structure: ids, titles, non-empty sections) — but it ships no built-in scenario library, has no checklist editor, and doesn't verify that recorded steps were actually followed.
 - **A shared iOS/Android runtime.** As decided in [Architecture](ARCHITECTURE.md#architectural-rule-ios-is-a-native-swift-package-not-a-kmp-target), iOS is a separate native Swift implementation, not a KMP-shared binary — this is deliberate, not a gap to "fix" later.
