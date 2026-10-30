@@ -45,7 +45,7 @@ TestScenarioResult (conceptual — result of a single recordResult call)
 ### Session identity
 
 - `name` is set once at construction and is immutable for the life of the session object. There is no "rename a session" operation — start a new `TestSession` instead.
-- A session has no persistent identity across app launches or process death — it is a plain in-memory object the host app or tester code holds a reference to for the duration of one test run.
+- A plain session has no persistent identity across app launches or process death — it is a plain in-memory object the host app or tester code holds a reference to for the duration of one test run. A session may opt into persistence (an `id` plus a session store), which the predefined-checklist feature uses; see `spec/TEST_CHECKLIST_FORMAT.md`. Without that opt-in, behavior is exactly as described here.
 
 ### Thread safety
 
@@ -111,3 +111,7 @@ Generated at (epoch millis): {generatedAtMillis}
 Note the merged section's header omits the outer `FeedbackKit` wrapper (`=== Test session: {name} ===`, not `=== FeedbackKit test session: {name} ===`) since it's already nested inside a `=== FeedbackKit bug report ===`-headed document — avoids a redundant "FeedbackKit" appearing twice in the same report. The count line and per-result line format are otherwise identical to the standalone export.
 
 When `testSession` is `null` (the default), `build()`'s output is byte-for-byte identical to a `BugReportBundler` with no test-session support at all — this is a purely additive, opt-in change to the existing report format.
+
+## Checklist-backed sessions
+
+A session constructed with a predefined `TestChecklist` (see `spec/TEST_CHECKLIST_FORMAT.md`) adds per-item recording (`recordResult(item, ...)`, which replaces rather than appends), a "not run" state that is *not* a `TestResult`, and extra report lines after the count line: a checklist line, a `Progress: {run} of {total} run` line, per-result counts, every item in checklist order (unrun items as `[NOT RUN]`), an ad-hoc block, and a "Not run" list. The header line and count line are unchanged, and a session **without** a checklist produces exactly the output specified above -- the additions apply only when a checklist is attached.
