@@ -8,8 +8,17 @@ import UIKit
 /// session -- recording PASS/FAIL/SKIP/BLOCKED results per scenario --
 /// merged into the same shared report. A host app can use this as-is, or
 /// call `BugReportBundler`/`TestSession` directly to build its own UI.
+///
+/// Given a `TestChecklist`, the session runs through that predefined plan
+/// instead (per-item status, progress, filter) and is saved to disk via
+/// `TestSessionStore` after every change, so a relaunch offers to resume
+/// it. Without one, behavior is unchanged: free-form, in-memory only.
 public struct FeedbackView: View {
     private static let maxAttachments = 5
+
+    private let checklist: TestChecklist?
+    /// Only checklist sessions are persisted; plain ones stay in-memory.
+    private let store: TestSessionStore?
 
     @State private var sessionName = ""
     @State private var session: TestSession?
@@ -25,7 +34,19 @@ public struct FeedbackView: View {
     @State private var showingAddAttachmentDialog = false
     @State private var photoPickerItem: PhotosPickerItem?
 
-    public init() {}
+    @State private var savedSession: TestSession?
+    @State private var didCheckForSavedSession = false
+    @State private var checklistFilter: ChecklistFilter = .all
+    @State private var collapsedSectionIDs: Set<String> = []
+    @State private var notesVersion = 0
+    @State private var showingClearConfirmation = false
+
+    /// - Parameter checklist: a predefined test plan to run through. `nil`
+    ///   (the default) keeps the original free-form, in-memory session UI.
+    public init(checklist: TestChecklist? = nil) {
+        self.checklist = checklist
+        self.store = checklist == nil ? nil : TestSessionStore()
+    }
 
     public var body: some View {
         ScrollView {
@@ -36,6 +57,14 @@ public struct FeedbackView: View {
                 if let session {
                     Text(session.name)
                         .accessibilityIdentifier("feedbackkit.sessionNameLabel")
+
+                    if let checklist = session.checklist {
+                        checklistContent(checklist, session: session)
+
+                        Text("Ad-hoc scenario")
+                            .font(.subheadline)
+                            .padding(.top, 8)
+                    }
 
                     TextField("Scenario name", text: $scenarioName)
                         .textFieldStyle(.roundedBorder)
@@ -56,23 +85,47 @@ public struct FeedbackView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    Text("Recorded results")
+                    Text(session.checklist == nil ? "Recorded results" : "Ad-hoc results")
                         .font(.subheadline)
                     // Reads resultsVersion so this redraws after each recordResult call --
                     // TestSession itself isn't an ObservableObject, it's a plain accumulator.
                     let _ = resultsVersion
-                    ForEach(Array(session.results().enumerated()), id: \.offset) { index, entry in
+                    // With a checklist, item results are shown on their rows above;
+                    // this list is only the free-form (ad-hoc) entries.
+                    let listedResults = session.checklist == nil
+                        ? session.results()
+                        : session.results().filter { $0.itemID == nil }
+                    ForEach(Array(listedResults.enumerated()), id: \.offset) { index, entry in
                         let notesSuffix = (entry.notes?.isEmpty == false) ? " — \(entry.notes!)" : ""
                         Text("[\(entry.result.rawValue)] \(entry.scenarioName)\(notesSuffix)")
                             .accessibilityIdentifier("feedbackkit.resultRow.\(index)")
                     }
+
+                    Button("Clear session", role: .destructive) {
+                        showingClearConfirmation = true
+                    }
+                    .padding(.top, 4)
+                    .accessibilityIdentifier("feedbackkit.clearSessionButton")
+                    .confirmationDialog(
+                        "Clear this test session?",
+                        isPresented: $showingClearConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Clear session", role: .destructive) { clearSession(session) }
+                            .accessibilityIdentifier("feedbackkit.confirmClearSessionButton")
+                    } message: {
+                        Text("All recorded results and notes in \"\(session.name)\" will be deleted.")
+                    }
+                } else if let savedSession {
+                    savedSessionCard(savedSession)
                 } else {
                     TextField("Session name", text: $sessionName)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("feedbackkit.sessionNameField")
                     Button("Start session") {
                         if !sessionName.trimmingCharacters(in: .whitespaces).isEmpty {
-                            session = TestSession(name: sessionName)
+                            session = TestSession(name: sessionName, checklist: checklist)
+                            sessionDidChange()
                         }
                     }
                     .accessibilityIdentifier("feedbackkit.startSessionButton")
@@ -100,8 +153,19 @@ public struct FeedbackView: View {
             }
             .padding()
         }
-        .onAppear { buildReport() }
+        .onAppear {
+            checkForSavedSession()
+            buildReport()
+        }
         .onChange(of: resultsVersion) { _ in buildReport() }
+        // Notes edits update the session (and its saved file) per keystroke,
+        // but the share payload is rebuilt only once typing pauses.
+        .task(id: notesVersion) {
+            guard notesVersion > 0 else { return }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            buildReport()
+        }
         .confirmationDialog(
             "Add Screenshot",
             isPresented: $showingAddAttachmentDialog,
@@ -125,6 +189,173 @@ public struct FeedbackView: View {
             AttachmentMarkupView(attachment: binding(for: attachment.id))
                 .onDisappear { buildReport() }
         }
+    }
+
+    // MARK: - Checklist
+
+    @ViewBuilder
+    private func checklistContent(_ checklist: TestChecklist, session: TestSession) -> some View {
+        // Same redraw trigger as the results list: TestSession isn't observable.
+        let _ = resultsVersion
+        let _ = notesVersion
+        let progress = session.checklistProgress() ?? TestChecklistProgress(total: 0, run: 0, counts: [:])
+        let visibleSections = checklist.sections.compactMap { section -> (TestChecklistSection, [TestChecklistItem])? in
+            let items = section.items.filter { checklistFilter.includes(session.result(forItemID: $0.id)) }
+            return items.isEmpty ? nil : (section, items)
+        }
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text(checklist.title)
+                .font(.subheadline.weight(.semibold))
+            Text("\(progress.run) of \(progress.total) run")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .accessibilityIdentifier("feedbackkit.checklist.progress")
+            ProgressView(value: Double(progress.run), total: Double(max(progress.total, 1)))
+                .accessibilityHidden(true)
+        }
+
+        Picker("Show", selection: $checklistFilter) {
+            ForEach(ChecklistFilter.allCases) { filter in
+                Text(filter.title).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("feedbackkit.checklist.filter")
+
+        if visibleSections.isEmpty {
+            Text("No items match this filter.")
+                .foregroundColor(.secondary)
+                .accessibilityIdentifier("feedbackkit.checklist.emptyFilterLabel")
+        }
+
+        ForEach(visibleSections, id: \.0.id) { section, items in
+            DisclosureGroup(isExpanded: expansionBinding(for: section.id)) {
+                ForEach(items) { item in
+                    ChecklistItemRow(
+                        item: item,
+                        entry: session.result(forItemID: item.id),
+                        onSelect: { result in
+                            session.recordResult(for: item, result: result, notes: session.result(forItemID: item.id)?.notes)
+                            sessionDidChange()
+                        },
+                        onReset: {
+                            session.resetResult(forItemID: item.id)
+                            sessionDidChange()
+                        },
+                        notes: notesBinding(for: item, in: session)
+                    )
+                    Divider()
+                }
+            } label: {
+                let sectionRun = section.items.filter { session.result(forItemID: $0.id) != nil }.count
+                HStack {
+                    Text(section.title)
+                        .font(.headline)
+                    Spacer()
+                    Text("\(sectionRun)/\(section.items.count)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .accessibilityLabel("\(sectionRun) of \(section.items.count) run")
+                }
+                .accessibilityElement(children: .combine)
+                // On the label, not the DisclosureGroup: an identifier on the
+                // group would override every item row's own identifier.
+                .accessibilityIdentifier("feedbackkit.checklist.section.\(section.id)")
+            }
+        }
+    }
+
+    private func savedSessionCard(_ saved: TestSession) -> some View {
+        let progress = saved.checklistProgress()
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Saved session in progress")
+                .font(.subheadline.weight(.semibold))
+            Text(saved.name)
+                .accessibilityIdentifier("feedbackkit.savedSessionNameLabel")
+            if let progress {
+                Text("\(progress.run) of \(progress.total) run")
+                    .foregroundColor(.secondary)
+                    .accessibilityIdentifier("feedbackkit.savedSessionProgressLabel")
+            }
+            HStack {
+                Button("Resume") {
+                    session = saved
+                    savedSession = nil
+                    resultsVersion += 1
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("feedbackkit.resumeSessionButton")
+                Button("Start new", role: .destructive) {
+                    store?.delete(id: saved.id)
+                    savedSession = nil
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("Deletes the saved session")
+                .accessibilityIdentifier("feedbackkit.startNewSessionButton")
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.12))
+        .cornerRadius(12)
+    }
+
+    private func expansionBinding(for sectionID: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedSectionIDs.contains(sectionID) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedSectionIDs.remove(sectionID)
+                } else {
+                    collapsedSectionIDs.insert(sectionID)
+                }
+            }
+        )
+    }
+
+    private func notesBinding(for item: TestChecklistItem, in session: TestSession) -> Binding<String> {
+        Binding(
+            get: { session.result(forItemID: item.id)?.notes ?? "" },
+            set: { newValue in
+                session.updateNotes(forItemID: item.id, notes: newValue)
+                store?.save(session)
+                notesVersion += 1
+            }
+        )
+    }
+
+    /// Looks once (on first appearance) for a saved in-progress session for
+    /// this checklist, to offer resuming it, and pre-fills the session name.
+    private func checkForSavedSession() {
+        guard !didCheckForSavedSession, let checklist, let store else { return }
+        didCheckForSavedSession = true
+        if sessionName.isEmpty {
+            sessionName = checklist.title
+        }
+        if session == nil {
+            savedSession = store.latestSession(for: checklist)
+        }
+    }
+
+    /// Call after every mutation of `session`: redraws, rebuilds the report,
+    /// and (checklist mode) saves the session so a relaunch can restore it.
+    private func sessionDidChange() {
+        resultsVersion += 1
+        if let store, let session {
+            store.save(session)
+        }
+    }
+
+    private func clearSession(_ cleared: TestSession) {
+        store?.delete(id: cleared.id)
+        session = nil
+        scenarioName = ""
+        notes = ""
+        if let checklist {
+            sessionName = checklist.title
+        }
+        resultsVersion += 1
     }
 
     // MARK: - Attachment strip
@@ -251,7 +482,7 @@ public struct FeedbackView: View {
         session.recordResult(scenarioName: scenarioName, result: result, notes: notes.isEmpty ? nil : notes)
         scenarioName = ""
         notes = ""
-        resultsVersion += 1
+        sessionDidChange()
     }
 
     /// Rebuilds the report text plus the full share payload (report file +
